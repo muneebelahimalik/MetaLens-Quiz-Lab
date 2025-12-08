@@ -4,29 +4,35 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const crypto = require('crypto');
 
+// Optional: enable CORS so the frontend hosted on a different domain (e.g. Firebase) can
+// communicate with this backend. Remove or restrict origins as needed.
+const cors = require('cors');
+
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(cors());
 app.use(bodyParser.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // Serve HTML files explicitly (fallback routes)
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Serve other html files from the public folder
 app.get('*.html', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', req.path));
 });
 
 // Initialize SQLite database
-const db = new sqlite3.Database('./metalens.db', (err) => {
+const db = new sqlite3.Database(path.join(__dirname, 'metalens.db'), (err) => {
   if (err) console.error('Database error:', err);
   else console.log('Connected to SQLite database');
 });
 
-// Create tables
+// Create tables if they do not exist
 db.serialize(() => {
   db.run(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +103,13 @@ db.serialize(() => {
 
 // Helper: Generate room code
 function generateRoomCode() {
-  return crypto.randomBytes(3).toString('hex').toUpperCase().substring(0, 5);
+  // Use characters excluding easily confused ones for readability
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 5; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
 }
 
 // === API ROUTES ===
@@ -105,10 +117,11 @@ function generateRoomCode() {
 // Create quiz
 app.post('/api/quizzes', (req, res) => {
   const { title, description } = req.body;
+  if (!title) return res.status(400).json({ error: 'Title required' });
   db.run(
     'INSERT INTO quizzes (title, description) VALUES (?, ?)',
-    [title, description],
-    function(err) {
+    [title, description || null],
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: this.lastID });
     }
@@ -126,13 +139,34 @@ app.get('/api/quizzes', (req, res) => {
 // Add question to quiz
 app.post('/api/quizzes/:quizId/questions', (req, res) => {
   const { quizId } = req.params;
-  const { text, option_a, option_b, option_c, option_d, correct_option, explanation, topic_tag } = req.body;
-  
+  const {
+    text,
+    option_a,
+    option_b,
+    option_c,
+    option_d,
+    correct_option,
+    explanation,
+    topic_tag,
+  } = req.body;
+  if (!text || !option_a || !option_b || !option_c || !correct_option) {
+    return res.status(400).json({ error: 'Incomplete question data' });
+  }
   db.run(
     `INSERT INTO questions (quiz_id, text, option_a, option_b, option_c, option_d, correct_option, explanation, topic_tag)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [quizId, text, option_a, option_b, option_c, option_d, correct_option, explanation, topic_tag],
-    function(err) {
+    [
+      quizId,
+      text,
+      option_a,
+      option_b,
+      option_c,
+      option_d || null,
+      correct_option,
+      explanation || null,
+      topic_tag || null,
+    ],
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: this.lastID });
     }
@@ -151,12 +185,12 @@ app.get('/api/quizzes/:quizId/questions', (req, res) => {
 // Create session
 app.post('/api/sessions', (req, res) => {
   const { quiz_id, mode } = req.body;
+  if (!quiz_id) return res.status(400).json({ error: 'quiz_id required' });
   const room_code = generateRoomCode();
-  
   db.run(
     'INSERT INTO sessions (quiz_id, room_code, mode) VALUES (?, ?, ?)',
     [quiz_id, room_code, mode || 'live'],
-    function(err) {
+    function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ id: this.lastID, room_code });
     }
@@ -176,7 +210,7 @@ app.post('/api/sessions/:sessionId/start', (req, res) => {
   );
 });
 
-// Next question
+// Advance to next question
 app.post('/api/sessions/:sessionId/next', (req, res) => {
   const { sessionId } = req.params;
   db.run(
@@ -193,10 +227,10 @@ app.post('/api/sessions/:sessionId/next', (req, res) => {
 app.get('/api/sessions/:sessionId/state', (req, res) => {
   const { sessionId } = req.params;
   db.get(
-    `SELECT s.*, q.title as quiz_title, 
-     (SELECT COUNT(*) FROM questions WHERE quiz_id = s.quiz_id) as total_questions
+    `SELECT s.*, q.title as quiz_title,
+      (SELECT COUNT(*) FROM questions WHERE quiz_id = s.quiz_id) as total_questions
      FROM sessions s
-     JOIN quizzes q ON s.quiz_id = q.quiz_id
+     JOIN quizzes q ON q.id = s.quiz_id
      WHERE s.id = ?`,
     [sessionId],
     (err, row) => {
@@ -210,14 +244,13 @@ app.get('/api/sessions/:sessionId/state', (req, res) => {
 app.post('/api/sessions/:roomCode/join', (req, res) => {
   const { roomCode } = req.params;
   const { user_name, team_name } = req.body;
-  
+  if (!user_name) return res.status(400).json({ error: 'user_name required' });
   db.get('SELECT id FROM sessions WHERE room_code = ?', [roomCode], (err, session) => {
     if (err || !session) return res.status(404).json({ error: 'Session not found' });
-    
     db.run(
       'INSERT INTO participants (session_id, user_name, team_name) VALUES (?, ?, ?)',
-      [session.id, user_name, team_name],
-      function(err) {
+      [session.id, user_name, team_name || null],
+      function (err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ participant_id: this.lastID, session_id: session.id });
       }
@@ -225,7 +258,7 @@ app.post('/api/sessions/:roomCode/join', (req, res) => {
   });
 });
 
-// Get participants
+// Get participants for a session
 app.get('/api/sessions/:sessionId/participants', (req, res) => {
   const { sessionId } = req.params;
   db.all('SELECT * FROM participants WHERE session_id = ?', [sessionId], (err, rows) => {
@@ -234,32 +267,26 @@ app.get('/api/sessions/:sessionId/participants', (req, res) => {
   });
 });
 
-// Get current question
+// Get current question for a session
 app.get('/api/sessions/:sessionId/current-question', (req, res) => {
   const { sessionId } = req.params;
-  
   db.get('SELECT quiz_id, current_question_index, status FROM sessions WHERE id = ?', [sessionId], (err, session) => {
     if (err || !session) return res.status(404).json({ error: 'Session not found' });
-    
     if (session.status !== 'in_progress') {
       return res.json({ status: session.status, question: null });
     }
-    
     db.all('SELECT * FROM questions WHERE quiz_id = ? ORDER BY id', [session.quiz_id], (err, questions) => {
       if (err) return res.status(500).json({ error: err.message });
-      
       const question = questions[session.current_question_index];
       if (!question) {
         return res.json({ status: 'finished', question: null });
       }
-      
-      // Don't send correct answer to frontend
       const { correct_option, explanation, ...safeQuestion } = question;
-      res.json({ 
+      res.json({
         status: 'in_progress',
         question: safeQuestion,
         index: session.current_question_index,
-        total: questions.length
+        total: questions.length,
       });
     });
   });
@@ -268,42 +295,40 @@ app.get('/api/sessions/:sessionId/current-question', (req, res) => {
 // Submit response
 app.post('/api/responses', (req, res) => {
   const { session_id, participant_id, question_id, selected_option, confidence, strategy_tag, response_time_ms } = req.body;
-  
+  if (!session_id || !participant_id || !question_id || !selected_option || !confidence || !strategy_tag) {
+    return res.status(400).json({ error: 'Missing response fields' });
+  }
   db.get('SELECT correct_option, explanation FROM questions WHERE id = ?', [question_id], (err, question) => {
     if (err || !question) return res.status(404).json({ error: 'Question not found' });
-    
     const is_correct = selected_option === question.correct_option ? 1 : 0;
-    
     db.run(
       `INSERT INTO responses (session_id, participant_id, question_id, selected_option, is_correct, confidence, strategy_tag, response_time_ms)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [session_id, participant_id, question_id, selected_option, is_correct, confidence, strategy_tag, response_time_ms],
-      function(err) {
+      [session_id, participant_id, question_id, selected_option, is_correct, confidence, strategy_tag, response_time_ms || 0],
+      function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        
         res.json({
           is_correct: is_correct === 1,
           correct_option: question.correct_option,
           explanation: question.explanation,
-          score_delta: is_correct ? 10 * confidence : 0
+          score_delta: is_correct ? 10 * confidence : 0,
         });
       }
     );
   });
 });
 
-// Get session summary
+// Get session summary (participants and per-question statistics)
 app.get('/api/sessions/:sessionId/summary', (req, res) => {
   const { sessionId } = req.params;
-  
-  // Get per-participant stats
+  // Per-participant stats
   db.all(
     `SELECT 
-      p.id, p.user_name, p.team_name,
-      COUNT(r.id) as total_answered,
-      SUM(r.is_correct) as total_correct,
-      AVG(r.confidence) as avg_confidence,
-      SUM(CASE WHEN r.is_correct = 0 AND r.confidence >= 4 THEN 1 ELSE 0 END) as overconfident_count
+       p.id, p.user_name, p.team_name,
+       COUNT(r.id) as total_answered,
+       SUM(r.is_correct) as total_correct,
+       AVG(r.confidence) as avg_confidence,
+       SUM(CASE WHEN r.is_correct = 0 AND r.confidence >= 4 THEN 1 ELSE 0 END) as overconfident_count
      FROM participants p
      LEFT JOIN responses r ON p.id = r.participant_id
      WHERE p.session_id = ?
@@ -311,22 +336,20 @@ app.get('/api/sessions/:sessionId/summary', (req, res) => {
     [sessionId],
     (err, participants) => {
       if (err) return res.status(500).json({ error: err.message });
-      
-      // Get per-question stats
+      // Per-question stats
       db.all(
         `SELECT 
-          q.id, q.text, q.topic_tag,
-          COUNT(r.id) as response_count,
-          AVG(r.is_correct) as pct_correct,
-          AVG(r.confidence) as avg_confidence,
-          r.selected_option,
-          COUNT(*) as option_count
+           q.id, q.text, q.topic_tag,
+           COUNT(r.id) as response_count,
+           AVG(r.is_correct) as pct_correct,
+           AVG(r.confidence) as avg_confidence,
+           SUM(CASE WHEN r.is_correct = 0 AND r.confidence >= 4 THEN 1 ELSE 0 END) as wrong_high_conf,
+           SUM(CASE WHEN r.is_correct = 1 AND r.confidence <= 2 THEN 1 ELSE 0 END) as right_low_conf
          FROM questions q
-         JOIN sessions s ON q.quiz_id = s.quiz_id
-         LEFT JOIN responses r ON q.id = r.question_id AND r.session_id = s.id
-         WHERE s.id = ?
-         GROUP BY q.id, r.selected_option`,
-        [sessionId],
+         LEFT JOIN responses r ON q.id = r.question_id AND r.session_id = ?
+         WHERE q.quiz_id = (SELECT quiz_id FROM sessions WHERE id = ?)
+         GROUP BY q.id`,
+        [sessionId, sessionId],
         (err, questions) => {
           if (err) return res.status(500).json({ error: err.message });
           res.json({ participants, questions });
@@ -336,16 +359,15 @@ app.get('/api/sessions/:sessionId/summary', (req, res) => {
   );
 });
 
-// Get leaderboard
+// Get leaderboard for a session
 app.get('/api/sessions/:sessionId/leaderboard', (req, res) => {
   const { sessionId } = req.params;
-  
   db.all(
     `SELECT 
-      p.user_name, p.team_name,
-      COUNT(r.id) as total_questions,
-      SUM(r.is_correct) as total_correct,
-      SUM(r.is_correct * r.confidence * 10) as score
+       p.user_name, p.team_name,
+       COUNT(r.id) as total_questions,
+       SUM(r.is_correct) as total_correct,
+       SUM(r.is_correct * r.confidence * 10) as score
      FROM participants p
      LEFT JOIN responses r ON p.id = r.participant_id
      WHERE p.session_id = ?
@@ -359,16 +381,15 @@ app.get('/api/sessions/:sessionId/leaderboard', (req, res) => {
   );
 });
 
-// Export CSV
+// Export CSV of responses for research
 app.get('/api/sessions/:sessionId/export', (req, res) => {
   const { sessionId } = req.params;
-  
   db.all(
     `SELECT 
-      p.user_name, p.team_name,
-      q.text as question, q.topic_tag,
-      r.selected_option, r.is_correct, r.confidence, r.strategy_tag, r.response_time_ms,
-      r.created_at
+       p.user_name, p.team_name,
+       q.text as question, q.topic_tag,
+       r.selected_option, r.is_correct, r.confidence, r.strategy_tag, r.response_time_ms,
+       r.created_at
      FROM responses r
      JOIN participants p ON r.participant_id = p.id
      JOIN questions q ON r.question_id = q.id
@@ -377,19 +398,18 @@ app.get('/api/sessions/:sessionId/export', (req, res) => {
     [sessionId],
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
-      
-      // Convert to CSV
       const headers = Object.keys(rows[0] || {});
-      const csv = [
-        headers.join(','),
-        ...rows.map(row => headers.map(h => JSON.stringify(row[h])).join(','))
-      ].join('\n');
-      
+      const csv = [headers.join(','), ...rows.map((row) => headers.map((h) => JSON.stringify(row[h])).join(','))].join('\n');
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=session_${sessionId}_export.csv`);
       res.send(csv);
     }
   );
+});
+
+// Fallback: serve index.html for any unknown routes (support for client-side navigation)
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Start server

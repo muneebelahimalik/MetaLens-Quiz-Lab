@@ -1,288 +1,281 @@
+// question.js
+// Handles rendering questions, submitting answers, showing feedback and summary
+
+// Retrieve session and participant info from localStorage
 const sessionId = localStorage.getItem('sessionId');
 const participantId = localStorage.getItem('participantId');
+const isSoloMode = localStorage.getItem('isSoloMode') === 'true';
 
-if (!sessionId || !participantId) {
-  window.location.href = 'join.html';
-}
+// DOM elements
+const questionView = document.getElementById('questionView');
+const feedbackView = document.getElementById('feedbackView');
+const summaryView = document.getElementById('summaryView');
+const progressBar = document.getElementById('progressBar');
+const timerEl = document.getElementById('timer');
 
+const questionTextEl = document.getElementById('questionText');
+const optionsContainer = document.getElementById('options');
+const confidenceSlider = document.getElementById('confidenceSlider');
+const confidenceValueEl = document.getElementById('confidenceValue');
+const strategyButtons = document.querySelectorAll('#strategyButtons .strategy-btn');
+const submitBtn = document.getElementById('submitBtn');
+
+const feedbackIcon = document.getElementById('feedbackIcon');
+const feedbackTitle = document.getElementById('feedbackTitle');
+const feedbackMessage = document.getElementById('feedbackMessage');
+const explanationEl = document.getElementById('explanation');
+const nextBtn = document.getElementById('nextBtn');
+const summaryContent = document.getElementById('summaryContent');
+
+// State variables
+let sessionInfo = null;
+let totalQuestions = 0;
 let currentQuestion = null;
+let currentIndex = 0;
 let selectedOption = null;
 let selectedStrategy = null;
-let startTime = Date.now();
-let timerInterval;
-let totalQuestions = 0;
-let currentIndex = 0;
-let allResponses = [];
+let timerInterval = null;
+let elapsedMs = 0;
 
-// Timer
+// Initialization
+if (!sessionId || !participantId) {
+  // Redirect to join page if session or participant is missing
+  window.location.href = 'join.html';
+} else {
+  // Initialize UI and fetch session info
+  init();
+}
+
+async function init() {
+  // Reset state
+  resetState();
+  // Load session info and total questions
+  await loadSessionInfo();
+  // Load first question
+  await loadQuestion();
+  // Attach event listeners
+  confidenceSlider.addEventListener('input', () => {
+    confidenceValueEl.textContent = confidenceSlider.value;
+    updateSubmitDisabled();
+  });
+  strategyButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      strategyButtons.forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      selectedStrategy = btn.getAttribute('data-strategy');
+      updateSubmitDisabled();
+    });
+  });
+  submitBtn.addEventListener('click', submitAnswer);
+  nextBtn.addEventListener('click', onNextClick);
+}
+
+function resetState() {
+  selectedOption = null;
+  selectedStrategy = null;
+  elapsedMs = 0;
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+async function loadSessionInfo() {
+  // Fetch session state to determine quiz_id and current index
+  const res = await fetch(`/api/sessions/${sessionId}/state`);
+  if (!res.ok) {
+    console.error('Failed to fetch session info');
+    return;
+  }
+  sessionInfo = await res.json();
+  // Fetch questions for the quiz to know total count
+  const qres = await fetch(`/api/quizzes/${sessionInfo.quiz_id}/questions`);
+  if (!qres.ok) {
+    console.error('Failed to fetch quiz questions');
+    return;
+  }
+  const questions = await qres.json();
+  totalQuestions = questions.length;
+}
+
+async function loadQuestion() {
+  // Hide feedback view and summary view, show question view
+  feedbackView.style.display = 'none';
+  summaryView.style.display = 'none';
+  questionView.style.display = 'block';
+  // Reset state for new question
+  resetState();
+  updateSubmitDisabled();
+  // Fetch current question from server
+  const res = await fetch(`/api/sessions/${sessionId}/current-question`);
+  if (!res.ok) {
+    console.error('Failed to fetch current question');
+    return;
+  }
+  const data = await res.json();
+  // If session is finished or no question returned, show summary
+  if (data.status === 'finished' || !data.question) {
+    showSummary();
+    return;
+  }
+  currentQuestion = data.question;
+  currentIndex = data.index || 0;
+  // Display question text
+  questionTextEl.textContent = currentQuestion.text;
+  // Render options
+  optionsContainer.innerHTML = '';
+  const options = [];
+  if (currentQuestion.option_a) options.push({ key: 'A', text: currentQuestion.option_a });
+  if (currentQuestion.option_b) options.push({ key: 'B', text: currentQuestion.option_b });
+  if (currentQuestion.option_c) options.push({ key: 'C', text: currentQuestion.option_c });
+  if (currentQuestion.option_d) options.push({ key: 'D', text: currentQuestion.option_d });
+  options.forEach((opt) => {
+    const div = document.createElement('div');
+    div.className = 'option';
+    div.textContent = `${opt.key}. ${opt.text}`;
+    div.setAttribute('data-key', opt.key);
+    div.addEventListener('click', () => {
+      document.querySelectorAll('.option').forEach((el) => el.classList.remove('selected'));
+      div.classList.add('selected');
+      selectedOption = opt.key;
+      updateSubmitDisabled();
+    });
+    optionsContainer.appendChild(div);
+  });
+  // Reset slider and strategy selection
+  confidenceSlider.value = 3;
+  confidenceValueEl.textContent = '3';
+  selectedStrategy = null;
+  strategyButtons.forEach((b) => b.classList.remove('selected'));
+  // Update progress bar
+  if (totalQuestions > 0) {
+    const progress = (currentIndex / totalQuestions) * 100;
+    progressBar.style.width = `${progress}%`;
+  }
+  // Start timer
+  startTimer();
+}
+
 function startTimer() {
-  startTime = Date.now();
+  if (timerInterval) clearInterval(timerInterval);
+  elapsedMs = 0;
+  timerEl.textContent = 'Time: 0s';
   timerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const minutes = Math.floor(elapsed / 60);
-    const seconds = elapsed % 60;
-    document.getElementById('timer').textContent = 
-      `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    elapsedMs += 1000;
+    timerEl.textContent = `Time: ${Math.floor(elapsedMs / 1000)}s`;
   }, 1000);
 }
 
-function stopTimer() {
-  clearInterval(timerInterval);
-  return Date.now() - startTime;
+function updateSubmitDisabled() {
+  // Only enable submit when option, confidence, and strategy selected
+  submitBtn.disabled = !(selectedOption && selectedStrategy && confidenceSlider.value);
 }
 
-// Confidence slider
-document.getElementById('confidenceSlider').addEventListener('input', (e) => {
-  document.getElementById('confidenceValue').textContent = e.target.value;
-  checkSubmitEnabled();
-});
-
-// Options selection
-function renderOptions(question) {
-  const optionsDiv = document.getElementById('options');
-  optionsDiv.innerHTML = '';
-  
-  const options = ['A', 'B', 'C', 'D'].filter(opt => question[`option_${opt.toLowerCase()}`]);
-  
-  options.forEach(opt => {
-    const optDiv = document.createElement('div');
-    optDiv.className = 'option';
-    optDiv.textContent = `${opt}. ${question[`option_${opt.toLowerCase()}`]}`;
-    optDiv.onclick = () => selectOption(opt, optDiv);
-    optionsDiv.appendChild(optDiv);
-  });
-}
-
-function selectOption(option, element) {
-  document.querySelectorAll('.option').forEach(el => el.classList.remove('selected'));
-  element.classList.add('selected');
-  selectedOption = option;
-  checkSubmitEnabled();
-}
-
-// Strategy selection
-document.querySelectorAll('.strategy-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.strategy-btn').forEach(b => b.classList.remove('selected'));
-    btn.classList.add('selected');
-    selectedStrategy = btn.dataset.strategy;
-    checkSubmitEnabled();
-  });
-});
-
-function checkSubmitEnabled() {
-  const submitBtn = document.getElementById('submitBtn');
-  submitBtn.disabled = !(selectedOption && selectedStrategy);
-}
-
-// Load question
-async function loadQuestion() {
-  try {
-    const response = await fetch(`/api/sessions/${sessionId}/current-question`);
-    const data = await response.json();
-    
-    if (data.status === 'finished' || !data.question) {
-      showSummary();
-      return;
-    }
-    
-    currentQuestion = data.question;
-    currentIndex = data.index;
-    totalQuestions = data.total;
-    
-    // Update progress
-    const progress = ((currentIndex + 1) / totalQuestions) * 100;
-    document.getElementById('progressBar').style.width = `${progress}%`;
-    
-    // Render question
-    document.getElementById('questionText').textContent = 
-      `Question ${currentIndex + 1} of ${totalQuestions}: ${currentQuestion.text}`;
-    renderOptions(currentQuestion);
-    
-    // Reset selections
-    selectedOption = null;
-    selectedStrategy = null;
-    document.getElementById('confidenceSlider').value = 3;
-    document.getElementById('confidenceValue').textContent = '3';
-    document.querySelectorAll('.strategy-btn').forEach(b => b.classList.remove('selected'));
-    checkSubmitEnabled();
-    
-    // Start timer
-    startTimer();
-    
-  } catch (error) {
-    console.error('Error loading question:', error);
+async function submitAnswer() {
+  // Stop timer
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
   }
-}
-
-// Submit answer
-document.getElementById('submitBtn').addEventListener('click', async () => {
-  const responseTime = stopTimer();
-  const confidence = parseInt(document.getElementById('confidenceSlider').value);
-  
+  // Prepare payload
+  const payload = {
+    session_id: Number(sessionId),
+    participant_id: Number(participantId),
+    question_id: currentQuestion.id,
+    selected_option: selectedOption,
+    confidence: Number(confidenceSlider.value),
+    strategy_tag: selectedStrategy,
+    response_time_ms: elapsedMs,
+  };
   try {
-    const response = await fetch('/api/responses', {
+    const res = await fetch('/api/responses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        session_id: parseInt(sessionId),
-        participant_id: parseInt(participantId),
-        question_id: currentQuestion.id,
-        selected_option: selectedOption,
-        confidence: confidence,
-        strategy_tag: selectedStrategy,
-        response_time_ms: responseTime
-      })
+      body: JSON.stringify(payload),
     });
-    
-    const result = await response.json();
-    allResponses.push({
-      question: currentQuestion.text,
-      selected: selectedOption,
-      correct: result.correct_option,
-      is_correct: result.is_correct,
-      confidence: confidence,
-      strategy: selectedStrategy
-    });
-    
-    showFeedback(result, confidence);
-    
+    const data = await res.json();
+    // Show feedback
+    showFeedback(data);
   } catch (error) {
-    console.error('Error submitting response:', error);
+    console.error('Failed to submit response', error);
   }
-});
+}
 
-// Show feedback
-function showFeedback(result, confidence) {
-  document.getElementById('questionView').style.display = 'none';
-  const feedbackView = document.getElementById('feedbackView');
+function showFeedback(data) {
+  // Hide question view, show feedback view
+  questionView.style.display = 'none';
   feedbackView.style.display = 'block';
-  
-  if (result.is_correct) {
-    feedbackView.className = 'question-card feedback correct';
-    document.getElementById('feedbackIcon').textContent = '✅';
-    document.getElementById('feedbackTitle').textContent = 'Correct!';
-    
-    if (confidence >= 4) {
-      document.getElementById('feedbackMessage').textContent = 
-        `Great job! You were confident and got it right. +${result.score_delta} points`;
-    } else {
-      document.getElementById('feedbackMessage').textContent = 
-        `You got it right but weren't very confident. Review this topic to build confidence. +${result.score_delta} points`;
-    }
+  feedbackIcon.textContent = data.is_correct ? '✅' : '❌';
+  feedbackTitle.textContent = data.is_correct ? 'Correct!' : 'Incorrect';
+  feedbackMessage.textContent = `Correct answer: ${data.correct_option}`;
+  // Explanation if available
+  if (data.explanation) {
+    explanationEl.style.display = 'block';
+    explanationEl.textContent = data.explanation;
   } else {
-    feedbackView.className = 'question-card feedback incorrect';
-    document.getElementById('feedbackIcon').textContent = '❌';
-    document.getElementById('feedbackTitle').textContent = 'Incorrect';
-    
-    if (confidence >= 4) {
-      document.getElementById('feedbackMessage').textContent = 
-        `You were very confident but got it wrong. This may indicate a misconception. The correct answer was ${result.correct_option}.`;
-    } else {
-      document.getElementById('feedbackMessage').textContent = 
-        `You weren't sure and got it wrong. The correct answer was ${result.correct_option}.`;
-    }
+    explanationEl.style.display = 'none';
   }
-  
-  if (result.explanation) {
-    document.getElementById('explanation').style.display = 'block';
-    document.getElementById('explanation').innerHTML = 
-      `<strong>Explanation:</strong><br>${result.explanation}`;
+  // Additional message for overconfidence or other cases
+  const conf = Number(confidenceSlider.value);
+  let confMsg = '';
+  if (!data.is_correct && conf >= 4) {
+    confMsg = 'You were very confident but incorrect. This may indicate a hidden misconception.';
+  } else if (!data.is_correct && conf <= 2) {
+    confMsg = 'You were unsure and incorrect. This suggests this concept needs more practice.';
+  } else if (data.is_correct && conf <= 2) {
+    confMsg = 'You were unsure but correct. You might understand more than you think.';
   }
+  feedbackMessage.textContent += confMsg ? `\n${confMsg}` : '';
 }
 
-// Next question
-document.getElementById('nextBtn').addEventListener('click', () => {
-  document.getElementById('feedbackView').style.display = 'none';
-  document.getElementById('questionView').style.display = 'block';
-  
-  const isSoloMode = localStorage.getItem('isSoloMode') === 'true';
-  
+async function onNextClick() {
+  // For solo mode, advance the session question index
   if (isSoloMode) {
-    // In solo mode, auto-advance to next question
-    advanceToNextQuestion();
-  } else {
-    // In live mode, poll for instructor to advance
-    pollForNextQuestion();
-  }
-});
-
-async function pollForNextQuestion() {
-  const pollInterval = setInterval(async () => {
-    const response = await fetch(`/api/sessions/${sessionId}/current-question`);
-    const data = await response.json();
-    
-    if (data.status === 'finished') {
-      clearInterval(pollInterval);
-      showSummary();
-    } else if (data.index > currentIndex) {
-      clearInterval(pollInterval);
-      loadQuestion();
+    try {
+      await fetch(`/api/sessions/${sessionId}/next`, { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to advance session', err);
     }
-  }, 2000);
-  
-  // Also load immediately in case already advanced
-  setTimeout(loadQuestion, 100);
+  } else {
+    // In live mode, the instructor will advance the question.
+    // We'll poll for new question after clicking next.
+  }
+  // After next, load the new question or summary
+  await loadQuestion();
 }
 
-async function advanceToNextQuestion() {
-  // In solo mode, advance immediately
+async function showSummary() {
+  // Hide other views, show summary view
+  questionView.style.display = 'none';
+  feedbackView.style.display = 'none';
+  summaryView.style.display = 'block';
+  summaryContent.innerHTML = '<h3>Quiz Complete</h3><p>Fetching your results…</p>';
   try {
-    await fetch(`/api/sessions/${sessionId}/next`, { method: 'POST' });
-    setTimeout(loadQuestion, 100);
-  } catch (error) {
-    console.error('Error advancing question:', error);
+    const res = await fetch(`/api/sessions/${sessionId}/summary`);
+    if (!res.ok) throw new Error('Failed to fetch summary');
+    const data = await res.json();
+    // Find participant summary
+    const participantData = data.participants.find((p) => p.user_name === localStorage.getItem('user_name') || p.id === Number(participantId));
+    let html = '<h3>Your Summary</h3>';
+    if (participantData) {
+      html += `<p>Total Questions: ${participantData.total}</p>`;
+      html += `<p>Correct Answers: ${participantData.correct}</p>`;
+      html += `<p>Average Confidence: ${participantData.avg_confidence.toFixed(2)}</p>`;
+      html += `<p>Overconfident Errors: ${participantData.overconfident_errors}</p>`;
+    }
+    // Optionally, list challenging questions (wrong answers with high confidence)
+    const challenging = [];
+    data.questions.forEach((q) => {
+      if (q.wrong_high_conf > 0) {
+        challenging.push(`<li>${q.text} (${q.topic_tag || 'topic'}) - Wrong high confidence: ${q.wrong_high_conf}</li>`);
+      }
+    });
+    if (challenging.length > 0) {
+      html += '<h4>Questions to Review:</h4><ul>' + challenging.join('') + '</ul>';
+    }
+    summaryContent.innerHTML = html;
+  } catch (err) {
+    console.error(err);
+    summaryContent.innerHTML = '<p>Error fetching summary.</p>';
   }
 }
-
-// Show summary
-function showSummary() {
-  document.getElementById('questionView').style.display = 'none';
-  document.getElementById('feedbackView').style.display = 'none';
-  document.getElementById('summaryView').style.display = 'block';
-  
-  const correct = allResponses.filter(r => r.is_correct).length;
-  const total = allResponses.length;
-  const percentage = Math.round((correct / total) * 100);
-  
-  const overconfident = allResponses.filter(r => !r.is_correct && r.confidence >= 4);
-  const underconfident = allResponses.filter(r => r.is_correct && r.confidence <= 2);
-  
-  let html = `
-    <div style="text-align: center; font-size: 1.5em; margin-bottom: 30px;">
-      <div style="font-size: 3em; color: #667eea; margin-bottom: 10px;">${percentage}%</div>
-      <div>Score: ${correct} / ${total} correct</div>
-    </div>
-  `;
-  
-  if (overconfident.length > 0) {
-    html += `
-      <div style="background: #fff5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #f56565;">
-        <h3 style="color: #c53030; margin-bottom: 10px;">⚠️ Overconfidence Detected</h3>
-        <p style="margin-bottom: 10px;">You were very confident but incorrect on these questions:</p>
-        <ul style="margin-left: 20px;">
-          ${overconfident.map(r => `<li>${r.question.substring(0, 60)}...</li>`).join('')}
-        </ul>
-        <p style="margin-top: 10px; font-style: italic;">This might indicate misconceptions worth reviewing.</p>
-      </div>
-    `;
-  }
-  
-  if (underconfident.length > 0) {
-    html += `
-      <div style="background: #f0fff4; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #48bb78;">
-        <h3 style="color: #2f855a; margin-bottom: 10px;">💪 Build Your Confidence</h3>
-        <p style="margin-bottom: 10px;">You got these right but weren't confident:</p>
-        <ul style="margin-left: 20px;">
-          ${underconfident.map(r => `<li>${r.question.substring(0, 60)}...</li>`).join('')}
-        </ul>
-        <p style="margin-top: 10px; font-style: italic;">You know more than you think! Review to build confidence.</p>
-      </div>
-    `;
-  }
-  
-  document.getElementById('summaryContent').innerHTML = html;
-}
-
-// Start
-loadQuestion();

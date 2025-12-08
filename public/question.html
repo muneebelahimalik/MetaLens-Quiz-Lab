@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz - MetaLens</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Question View -->
+    <div id="questionView">
+      <div class="progress-bar-container">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div id="timer" style="font-size: 14px; color: #64748b; margin-bottom: 8px;">Time: 0s</div>
+      <div id="questionCard" class="question-card">
+        <div id="questionText" style="margin-bottom: 15px;"></div>
+        <div id="options"></div>
+        <div class="control-group">
+          <label>Confidence (1 = guessing, 5 = very sure)</label>
+          <input type="range" id="confidenceSlider" min="1" max="5" value="3">
+          <span id="confidenceValue">3</span>
+        </div>
+        <div class="control-group">
+          <label>How did you get this answer?</label>
+          <div id="strategyButtons">
+            <button type="button" class="strategy-btn" data-strategy="Remembered formula">Remembered formula</button>
+            <button type="button" class="strategy-btn" data-strategy="Applied concept">Applied concept</button>
+            <button type="button" class="strategy-btn" data-strategy="Guessed">Guessed</button>
+            <button type="button" class="strategy-btn" data-strategy="Saw similar example">Saw similar example</button>
+            <button type="button" class="strategy-btn" data-strategy="Used notes/homework">Used notes/homework</button>
+          </div>
+        </div>
+        <button id="submitBtn" class="btn btn-primary" disabled>Submit</button>
+      </div>
+    </div>
+    <!-- Feedback View -->
+    <div id="feedbackView" class="question-card feedback" style="display: none;">
+      <div style="text-align: center; font-size: 3em; margin-bottom: 10px;"><span id="feedbackIcon"></span></div>
+      <h3 id="feedbackTitle"></h3>
+      <p id="feedbackMessage"></p>
+      <div id="explanation" style="margin-top: 10px; display: none;"></div>
+      <button id="nextBtn" class="btn btn-accent" style="margin-top: 20px;">Next</button>
+    </div>
+    <!-- Summary View -->
+    <div id="summaryView" style="display: none;">
+      <div id="summaryContent"></div>
+    </div>
+  </div>
+  <script src="question.js"></script>
+</body>
+</html>

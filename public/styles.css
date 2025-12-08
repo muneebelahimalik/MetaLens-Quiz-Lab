@@ -1,0 +1,174 @@
+/* Global styles */
+body {
+  font-family: Arial, sans-serif;
+  background: #f4f7fb;
+  margin: 0;
+  padding: 0;
+  color: #1a202c;
+}
+
+.container {
+  max-width: 960px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+.hero {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.hero h1 {
+  font-size: 2.5em;
+  margin-bottom: 10px;
+}
+
+.tagline {
+  font-size: 1.2em;
+  color: #64748b;
+}
+
+/* Card grid */
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 700px) {
+  .card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.card {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.card h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.4em;
+}
+
+/* Buttons */
+.btn {
+  display: inline-block;
+  padding: 10px 16px;
+  margin: 6px 0;
+  border: none;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 16px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn-primary { background: #3b82f6; }
+.btn-primary:hover { background: #2563eb; }
+
+.btn-secondary { background: #64748b; }
+.btn-secondary:hover { background: #475569; }
+
+.btn-accent { background: #8b5cf6; }
+.btn-accent:hover { background: #6d28d9; }
+
+.btn-danger { background: #e11d48; }
+.btn-danger:hover { background: #be123c; }
+
+/* Forms */
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: bold;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+/* Question page */
+.progress-bar-container {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.progress-bar {
+  height: 100%;
+  background: #3b82f6;
+  width: 0%;
+}
+
+.question-card {
+  background: #ffffff;
+  padding: 20px;
+  margin: 20px 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.feedback.correct {
+  border-left: 4px solid #48bb78;
+}
+
+.feedback.incorrect {
+  border-left: 4px solid #e11d48;
+}
+
+.option {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 10px;
+  margin: 6px 0;
+  cursor: pointer;
+}
+
+.option.selected {
+  border-color: #3b82f6;
+  background: #e0f2fe;
+}
+
+.strategy-btn {
+  margin: 4px;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #f7fafc;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.strategy-btn.selected {
+  background: #0f766e;
+  color: #ffffff;
+}
+
+/* Waiting room */
+.room-code-display {
+  font-size: 2em;
+  letter-spacing: 4px;
+  text-align: center;
+  margin: 20px 0;
+  font-weight: bold;
+}
+
+.error {
+  color: #e11d48;
+}
