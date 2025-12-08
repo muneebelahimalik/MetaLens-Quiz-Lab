@@ -195,7 +195,16 @@ function showFeedback(result, confidence) {
 document.getElementById('nextBtn').addEventListener('click', () => {
   document.getElementById('feedbackView').style.display = 'none';
   document.getElementById('questionView').style.display = 'block';
-  pollForNextQuestion();
+  
+  const isSoloMode = localStorage.getItem('isSoloMode') === 'true';
+  
+  if (isSoloMode) {
+    // In solo mode, auto-advance to next question
+    advanceToNextQuestion();
+  } else {
+    // In live mode, poll for instructor to advance
+    pollForNextQuestion();
+  }
 });
 
 async function pollForNextQuestion() {
@@ -214,6 +223,16 @@ async function pollForNextQuestion() {
   
   // Also load immediately in case already advanced
   setTimeout(loadQuestion, 100);
+}
+
+async function advanceToNextQuestion() {
+  // In solo mode, advance immediately
+  try {
+    await fetch(`/api/sessions/${sessionId}/next`, { method: 'POST' });
+    setTimeout(loadQuestion, 100);
+  } catch (error) {
+    console.error('Error advancing question:', error);
+  }
 }
 
 // Show summary

@@ -11,6 +11,15 @@ const PORT = 3000;
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// Serve HTML files explicitly (fallback routes)
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+app.get('*.html', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', req.path));
+});
+
 // Initialize SQLite database
 const db = new sqlite3.Database('./metalens.db', (err) => {
   if (err) console.error('Database error:', err);
