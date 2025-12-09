@@ -1,137 +1,79 @@
-// solo.js
-
 // Load available quizzes on page load
 document.addEventListener('DOMContentLoaded', loadQuizzes);
 
 async function loadQuizzes() {
   const listEl = document.getElementById('quizzesList');
-  const noQuizzesEl = document.getElementById('noQuizzes');
-
-  if (!listEl) {
-    console.error('quizzesList element not found in solo.html');
-    return;
-  }
-
   try {
     const response = await fetch('/api/quizzes');
-    if (!response.ok) {
-      throw new Error('Failed to load quizzes');
-    }
-
     const quizzes = await response.json();
-
-    if (!Array.isArray(quizzes) || quizzes.length === 0) {
-      // No quizzes available
-      listEl.innerHTML = '';
-      if (noQuizzesEl) {
-        noQuizzesEl.style.display = 'block';
-      } else {
-        listEl.innerHTML =
-          '<p style="text-align:center;color:#666;">No quizzes available yet. Ask your instructor to create one.</p>';
-      }
+    if (quizzes.length === 0) {
+      listEl.innerHTML = '<p>No quizzes available. Ask your instructor to create one.</p>';
       return;
     }
-
-    if (noQuizzesEl) {
-      noQuizzesEl.style.display = 'none';
-    }
-
-    listEl.innerHTML = quizzes
+    const html = quizzes
       .map(
         (q) => `
-        <div class="card" style="margin-bottom:15px; cursor:pointer;">
-          <h3 style="margin-bottom:8px;">${q.title}</h3>
-          <p style="margin-bottom:12px;color:#666;">${q.description || 'No description'}</p>
-          <button class="btn btn-primary" type="button" onclick="startSolo(${q.id})">
-            Start Practice
-          </button>
+        <div class="card" style="margin-bottom: 15px; text-align: left;">
+          <h3>${q.title}</h3>
+          <p>${q.description || ''}</p>
+          <button class="btn btn-accent" onclick="startSolo(${q.id})">Start Practice</button>
         </div>
       `
       )
       .join('');
+    listEl.innerHTML = html;
   } catch (error) {
-    console.error('Error loading quizzes:', error);
-    listEl.innerHTML =
-      '<p style="color:#e53e3e;text-align:center;">Error loading quizzes. Please try again.</p>';
+    listEl.innerHTML = '<p>Error loading quizzes.</p>';
+    console.error(error);
   }
 }
 
 async function startSolo(quizId) {
   const errorEl = document.getElementById('soloError');
-  if (errorEl) errorEl.textContent = '';
-
-  // Try to get name from input; if not present (old solo.html), fall back to prompt
-  let nameInput = document.getElementById('soloName');
-  let userName = nameInput ? nameInput.value.trim() : '';
-
-  if (!userName) {
-    userName = window.prompt('Enter your name for this practice session:') || '';
-    userName = userName.trim();
-  }
-
-  if (!userName) {
-    if (errorEl) {
-      errorEl.textContent = 'Please enter your name.';
-    }
+  errorEl.textContent = '';
+  const name = document.getElementById('soloName').value.trim();
+  if (!name) {
+    errorEl.textContent = 'Please enter your name.';
     return;
   }
-
   try {
-    // 1) Create a solo session
+    // Create a solo session
     const sessionRes = await fetch('/api/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quiz_id: quizId, mode: 'solo' })
+      body: JSON.stringify({ quiz_id: quizId, mode: 'solo' }),
     });
     const sessionData = await sessionRes.json();
-
     if (!sessionRes.ok) {
-      const msg = sessionData && sessionData.error ? sessionData.error : 'Failed to create session.';
-      if (errorEl) errorEl.textContent = msg;
-      else alert(msg);
+      errorEl.textContent = sessionData.error || 'Failed to create session.';
       return;
     }
-
-    // 2) Join the session using room_code
+    // Join the solo session
     const joinRes = await fetch(`/api/sessions/${sessionData.room_code}/join`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_name: userName,
-        team_name: null
-      })
+      body: JSON.stringify({ user_name: name, team_name: null }),
     });
     const joinData = await joinRes.json();
-
     if (!joinRes.ok) {
-      const msg = joinData && joinData.error ? joinData.error : 'Failed to join session.';
-      if (errorEl) errorEl.textContent = msg;
-      else alert(msg);
+      errorEl.textContent = joinData.error || 'Failed to join session.';
       return;
     }
-
-    // 3) Start the session so questions load correctly
+    // Start the session immediately for solo mode so questions load properly
     try {
-      await fetch(`/api/sessions/${joinData.session_id}/start`, {
-        method: 'POST'
-      });
+      await fetch(`/api/sessions/${sessionData.id}/start`, { method: 'POST' });
     } catch (e) {
-      console.warn('Could not auto-start solo session', e);
+      console.warn('Failed to automatically start solo session', e);
     }
-
-    // 4) Store info for question.html
-    localStorage.setItem('sessionId', String(joinData.session_id));
+    // Store session and participant info so question page can identify the user and session
+    localStorage.setItem('sessionId', String(sessionData.id));
     localStorage.setItem('participantId', String(joinData.participant_id));
+    localStorage.setItem('user_name', name);
     localStorage.setItem('roomCode', sessionData.room_code);
-    localStorage.setItem('user_name', userName);
     localStorage.setItem('isSoloMode', 'true');
-
-    // 5) Go to questions
+    // Redirect to the quiz page
     window.location.href = 'question.html';
   } catch (err) {
-    console.error('Error starting solo practice:', err);
-    const msg = 'Network error starting solo practice.';
-    if (errorEl) errorEl.textContent = msg;
-    else alert(msg);
+    errorEl.textContent = 'Network error.';
   }
 }

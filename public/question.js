@@ -255,19 +255,27 @@ async function showSummary() {
     if (!res.ok) throw new Error('Failed to fetch summary');
     const data = await res.json();
     // Find participant summary
-    const participantData = data.participants.find((p) => p.user_name === localStorage.getItem('user_name') || p.id === Number(participantId));
+    const participantData = data.participants.find(
+      (p) => p.user_name === localStorage.getItem('user_name') || p.id === Number(participantId)
+    );
     let html = '<h3>Your Summary</h3>';
     if (participantData) {
-      html += `<p>Total Questions: ${participantData.total}</p>`;
-      html += `<p>Correct Answers: ${participantData.correct}</p>`;
-      html += `<p>Average Confidence: ${participantData.avg_confidence.toFixed(2)}</p>`;
-      html += `<p>Overconfident Errors: ${participantData.overconfident_errors}</p>`;
+      const total = participantData.total_answered || participantData.total || 0;
+      const correct = participantData.total_correct || participantData.correct || 0;
+      const avgConf = participantData.avg_confidence != null ? participantData.avg_confidence : 0;
+      const overconf = participantData.overconfident_count || participantData.overconfident_errors || 0;
+      html += `<p>Total Questions Answered: ${total}</p>`;
+      html += `<p>Correct Answers: ${correct}</p>`;
+      html += `<p>Average Confidence: ${avgConf.toFixed(2)}</p>`;
+      html += `<p>Overconfident Errors: ${overconf}</p>`;
     }
     // Optionally, list challenging questions (wrong answers with high confidence)
     const challenging = [];
     data.questions.forEach((q) => {
-      if (q.wrong_high_conf > 0) {
-        challenging.push(`<li>${q.text} (${q.topic_tag || 'topic'}) - Wrong high confidence: ${q.wrong_high_conf}</li>`);
+      if (q.wrong_high_conf && q.wrong_high_conf > 0) {
+        challenging.push(
+          `<li>${q.text} (${q.topic_tag || 'topic'}) – Wrong high confidence: ${q.wrong_high_conf}</li>`
+        );
       }
     });
     if (challenging.length > 0) {

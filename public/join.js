@@ -20,10 +20,12 @@ document.getElementById('joinBtn').addEventListener('click', async () => {
       return;
     }
     // Save to localStorage for subsequent pages
-    localStorage.setItem('sessionId', data.session_id);
-    localStorage.setItem('participantId', data.participant_id);
+    localStorage.setItem('sessionId', String(data.session_id));
+    localStorage.setItem('participantId', String(data.participant_id));
     localStorage.setItem('isSoloMode', 'false');
     localStorage.setItem('roomCode', roomCode);
+    localStorage.setItem('user_name', userName);
+    localStorage.setItem('team_name', teamName);
     // After joining, check session status. If waiting, show waiting room.
     try {
       const stateRes = await fetch(`/api/sessions/${data.session_id}/state`);
