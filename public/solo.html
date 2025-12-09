@@ -8,22 +8,41 @@
 </head>
 <body>
   <div class="container">
+    <!-- Hero section -->
     <div class="hero">
       <h1>📚 Solo Practice</h1>
-      <p class="tagline">Practice at your own pace</p>
+      <p class="tagline">Practice at your own pace and see how confident you really are</p>
     </div>
 
+    <!-- Main card -->
     <div class="card" style="max-width: 600px; margin: 0 auto;">
-      <h2>Available Quizzes</h2>
-      <div id="quizzesList"></div>
-      <div id="noQuizzes" style="text-align: center; padding: 40px; color: #666; display: none;">
+      <h2 style="margin-bottom: 16px;">Start a Solo Session</h2>
+
+      <!-- Name input -->
+      <div class="form-group" style="margin-bottom: 20px;">
+        <label for="soloName">Your Name</label>
+        <input id="soloName" type="text" placeholder="Enter your name">
+      </div>
+
+      <!-- Error message -->
+      <p id="soloError" class="error" style="margin-bottom: 10px;"></p>
+
+      <h3 style="margin-top: 10px;">Available Quizzes</h3>
+      <div id="quizzesList" style="margin-top: 10px;"></div>
+
+      <!-- No quizzes fallback -->
+      <div id="noQuizzes"
+           style="text-align: center; padding: 30px; color: #666; display: none;">
         <p>No quizzes available yet.</p>
         <p>Ask your instructor to create some quizzes!</p>
       </div>
     </div>
 
+    <!-- Back button -->
     <div style="text-align: center; margin-top: 30px;">
-      <button onclick="location.href='index.html'" class="btn btn-secondary">Back to Home</button>
+      <button onclick="location.href='index.html'" class="btn btn-secondary">
+        Back to Home
+      </button>
     </div>
   </div>
 

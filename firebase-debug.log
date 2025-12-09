@@ -1,0 +1,19 @@
+[debug] [2025-12-08T10:17:34.822Z] ----------------------------------------------------------------------
+[debug] [2025-12-08T10:17:34.830Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\mm17889\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init hosting
+[debug] [2025-12-08T10:17:34.831Z] CLI Version:   14.27.0
+[debug] [2025-12-08T10:17:34.831Z] Platform:      win32
+[debug] [2025-12-08T10:17:34.831Z] Node Version:  v24.11.1
+[debug] [2025-12-08T10:17:34.831Z] Time:          Mon Dec 08 2025 05:17:34 GMT-0500 (Eastern Standard Time)
+[debug] [2025-12-08T10:17:34.832Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\mm17889\MetaLens-Quiz-Lab
+
